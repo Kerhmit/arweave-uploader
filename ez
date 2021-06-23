@@ -1,0 +1,56 @@
+const Arweave = require('arweave');
+const fs = require('fs');
+const fcn = async () => {
+  const arweaveConnection = Arweave.init({
+    host: 'arweave.net', // Hostname or IP address for a Arweave host
+    port: 443, // Port
+    protocol: 'https', // Network protocol http or https
+    timeout: 20000, // Network request timeouts in milliseconds
+    logging: true, // Enable network request logging
+  });
+
+  let rawdata = fs.readFileSync('/Users/jprince/arweave.json');
+  let arweaveWallet;
+  try {
+    arweaveWallet = JSON.parse(rawdata);
+  } catch (e) {
+    arweaveWallet = rawdata.toString();
+  }
+
+  fs.stat(process.env.FILE, async (err, fileSize) => {
+    console.log('Wht', fileSize.size);
+    let rawFile = fs.readFileSync(process.env.FILE);
+
+    const anchor = (await arweaveConnection.api.get('tx_anchor')).data;
+
+    const transaction = await arweaveConnection.createTransaction(
+      { data: rawFile, last_tx: anchor },
+      arweaveWallet,
+    );
+
+    transaction.addTag('Content-Type', 'video/mp4');
+
+    //transaction.data_size = fileSize.size;
+    // transaction.data = rawFile;
+    // const sig = await transaction.getSignatureData();
+    await arweaveConnection.transactions.sign(transaction, arweaveWallet);
+
+    console.log('Txn id', transaction.id);
+
+    let uploader = await arweaveConnection.transactions.getUploader(
+      transaction,
+    );
+
+    while (!uploader.isComplete) {
+      await uploader.uploadChunk();
+      console.log(
+        `${uploader.pctComplete}% complete, ${uploader.uploadedChunks}/${uploader.totalChunks}`,
+      );
+    }
+
+    console.log('Id', transaction.id);
+    //transaction.addTag('Content-Type', mime);
+  });
+};
+
+fcn();
